@@ -20,7 +20,7 @@ set -euo pipefail
 #   (Hierarchical sheets keep their filenames; change those later if you want.)
 # - Creates <new>-backups/ empty folder in the new project.
 
-echo "== KiCad Project Forker =="
+echo "== KiCad Project Forker v0.2 =="
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
   echo "Usage: $0 <source_project_dir> <new_project_basename> [<destination_parent_dir>]"
@@ -83,7 +83,7 @@ echo ">> Copying project folder (excluding junk)..."
 
 # Prefer rsync for selective copy
 if command -v rsync >/dev/null 2>&1; then
-  rsync -a --info=stats1,progress2 \
+  rsync -av \
     --exclude '.git/' \
     --exclude '.svn/' \
     --exclude '.hg/' \
@@ -94,6 +94,11 @@ if command -v rsync >/dev/null 2>&1; then
     --exclude '*-backups/' \
     --exclude '*.kicad_sch-bak' \
     --exclude '*~' \
+    --exclude '~*' \
+    --exclude '_*' \
+    --exclude '#*' \
+    --exclude '*_old' \
+    --exclude '*_old.*' \
     --exclude '*.tmp' \
     --exclude '*.bak' \
     --exclude '*.autosave*' \
@@ -108,6 +113,11 @@ else
   find "$DEST_DIR_ABS" -name '*.lock' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*.kicad_sch-bak' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*~' -delete 2>/dev/null || true
+  find "$DEST_DIR_ABS" -name '~*' -delete 2>/dev/null || true
+  find "$DEST_DIR_ABS" -name '_*' -delete 2>/dev/null || true
+  find "$DEST_DIR_ABS" -name '#*' -delete 2>/dev/null || true
+  find "$DEST_DIR_ABS" -name '*_old' -delete 2>/dev/null || true
+  find "$DEST_DIR_ABS" -name '*_old.*' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*.tmp' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*.bak' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*-backups' -type d -prune -exec rm -rf {} + 2>/dev/null || true
@@ -116,12 +126,19 @@ fi
 echo
 echo ">> Renaming top-level project files to new basename..."
 
+# Add DPX- prefix to filenames if not already present
+FILE_BASE="$NEW_BASE"
+if [[ ! "$NEW_BASE" =~ ^DPX[-_] ]]; then
+  FILE_BASE="DPX-$NEW_BASE"
+  echo "   Adding DPX- prefix to filenames: $FILE_BASE"
+fi
+
 rename_if_exists () {
   local ext="$1"
   local old="$DEST_DIR_ABS/$OLD_BASE.$ext"
-  local new="$DEST_DIR_ABS/$NEW_BASE.$ext"
+  local new="$DEST_DIR_ABS/$FILE_BASE.$ext"
   if [[ -f "$old" ]]; then
-    echo "   $OLD_BASE.$ext -> $NEW_BASE.$ext"
+    echo "   $OLD_BASE.$ext -> $FILE_BASE.$ext"
     mv "$old" "$new"
   else
     echo "   (skip) $OLD_BASE.$ext not found"
@@ -134,8 +151,8 @@ rename_if_exists "kicad_sch"
 
 echo
 echo ">> Creating backups folder..."
-mkdir -p "$DEST_DIR_ABS/${NEW_BASE}-backups"
-echo "   Created: $DEST_DIR_ABS/${NEW_BASE}-backups"
+mkdir -p "$DEST_DIR_ABS/${FILE_BASE}-backups"
+echo "   Created: $DEST_DIR_ABS/${FILE_BASE}-backups"
 
 echo
 echo ">> Verifying common library assets..."
