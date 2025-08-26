@@ -16,7 +16,7 @@ set -euo pipefail
 # Notes:
 # - Handles absolute or relative paths.
 # - Excludes typical junk: locks, autosaves, VCS metadata, temp files, etc.
-# - Renames only the TOP-LEVEL project files: .kicad_pro, .kicad_pcb, .kicad_sch (root sheet).
+# - Renames ALL files and directories containing the old basename.
 #   (Hierarchical sheets keep their filenames; change those later if you want.)
 # - Creates <new>-backups/ empty folder in the new project.
 
@@ -65,15 +65,23 @@ if [[ -e "$DEST_DIR_ABS" ]]; then
   exit 3
 fi
 
-# Find the old project basename (prefer a single .kicad_pro)
+# Find the old project basename (search for .kicad_pro files anywhere in the project)
 echo ">> Detecting project files in source..."
-PRO_FILES=( "$SRC_DIR_ABS"/*.kicad_pro )
+PRO_FILES=()
+while IFS= read -r -d '' file; do
+  PRO_FILES+=("$file")
+done < <(find "$SRC_DIR_ABS" -name "*.kicad_pro" -print0 2>/dev/null)
+
 OLD_BASE=""
-if [[ ${#PRO_FILES[@]} -eq 1 && -f "${PRO_FILES[0]}" ]]; then
+if [[ ${#PRO_FILES[@]} -eq 1 ]]; then
   OLD_BASE="$(basename "${PRO_FILES[0]}" .kicad_pro)"
   echo "   Detected project basename: $OLD_BASE"
+elif [[ ${#PRO_FILES[@]} -gt 1 ]]; then
+  echo "   Found ${#PRO_FILES[@]} .kicad_pro files. Using the first one as main project."
+  OLD_BASE="$(basename "${PRO_FILES[0]}" .kicad_pro)"
+  echo "   Using project basename: $OLD_BASE"
 else
-  echo "   Could not uniquely detect .kicad_pro (found ${#PRO_FILES[@]})."
+  echo "   Could not find any .kicad_pro files."
   echo "   Falling back to directory name as basename."
   OLD_BASE="$(basename "$SRC_DIR_ABS")"
 fi
@@ -124,7 +132,7 @@ else
 fi
 
 echo
-echo ">> Renaming top-level project files to new basename..."
+echo ">> Renaming ALL files and directories containing old basename..."
 
 # Add DPX- prefix to filenames if not already present
 FILE_BASE="$NEW_BASE"
@@ -133,21 +141,46 @@ if [[ ! "$NEW_BASE" =~ ^DPX[-_] ]]; then
   echo "   Adding DPX- prefix to filenames: $FILE_BASE"
 fi
 
-rename_if_exists () {
-  local ext="$1"
-  local old="$DEST_DIR_ABS/$OLD_BASE.$ext"
-  local new="$DEST_DIR_ABS/$FILE_BASE.$ext"
-  if [[ -f "$old" ]]; then
-    echo "   $OLD_BASE.$ext -> $FILE_BASE.$ext"
-    mv "$old" "$new"
+# Function to rename all files and directories containing the old basename
+rename_all_occurrences () {
+  local found_count=0
+  
+  # First, rename directories (bottom-up to avoid path issues)
+  echo "   Renaming directories..."
+  while IFS= read -r -d '' dir_path; do
+    local parent_dir="$(dirname "$dir_path")"
+    local old_name="$(basename "$dir_path")"
+    local new_name="${old_name/$OLD_BASE/$FILE_BASE}"
+    
+    if [[ "$old_name" != "$new_name" ]]; then
+      echo "     $old_name -> $new_name"
+      mv "$dir_path" "$parent_dir/$new_name"
+      ((found_count++))
+    fi
+  done < <(find "$DEST_DIR_ABS" -type d -name "*$OLD_BASE*" -print0 2>/dev/null | sort -z -r)
+  
+  # Then rename files
+  echo "   Renaming files..."
+  while IFS= read -r -d '' file_path; do
+    local parent_dir="$(dirname "$file_path")"
+    local old_name="$(basename "$file_path")"
+    local new_name="${old_name/$OLD_BASE/$FILE_BASE}"
+    
+    if [[ "$old_name" != "$new_name" ]]; then
+      echo "     $old_name -> $new_name"
+      mv "$file_path" "$parent_dir/$new_name"
+      ((found_count++))
+    fi
+  done < <(find "$DEST_DIR_ABS" -type f -name "*$OLD_BASE*" -print0 2>/dev/null)
+  
+  if [[ $found_count -eq 0 ]]; then
+    echo "   (skip) No files or directories containing '$OLD_BASE' found"
   else
-    echo "   (skip) $OLD_BASE.$ext not found"
+    echo "   Renamed $found_count items"
   fi
 }
 
-rename_if_exists "kicad_pro"
-rename_if_exists "kicad_pcb"
-rename_if_exists "kicad_sch"
+rename_all_occurrences
 
 echo
 echo ">> Creating backups folder..."
@@ -187,7 +220,7 @@ for d in "${DIR_HINTS[@]}"; do
   fi
 done
 if [[ $FOUND_ANY -eq 0 ]]; then
-  echo "   No obvious local libraries detected (that’s fine if you use global libs)."
+  echo "   No obvious local libraries detected (that's fine if you use global libs)."
 fi
 
 echo
