@@ -39,7 +39,7 @@
     <img src="images/logo.png" alt="Logo" height="120">
   </a>
 <h1 align="center">dpx_fork_kicad</h1>
-<h3 align="center"><i>fork that 'dog yo<</i></h3>
+<h3 align="center"><i>fork that 'dog yo</i></h3>
   <p align="center">
     ...fork your kicad project quickly and with maximum fork!
     <br />
@@ -129,9 +129,50 @@ fork your forking for with maximum fork with kicad fork forkity fork forking FOR
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-1. <!-- Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
+### Make it globally accessible (optional)
+To use the script from anywhere, create a symlink in `/usr/local/bin`:
 
-_For more examples, please refer to the [Documentation](https://example.com)_-->
+```bash
+sudo ln -sf '/Users/yourmom/Library/CloudStorage/GoogleDrive-i@dubpixel.tv/My Drive/_.DUBPIXEL/_...CIRCUIT_PROJECTS/DPX_FORK_KICAD/src/fork_kicad_project.sh' /usr/local/bin/fork-kicad
+```
+
+Now you can run it as:
+```bash
+fork-kicad <source_project_dir> <new_project_basename> [<destination_parent_dir>]
+```
+
+This script helps you fork a KiCad project folder, excluding junk files and renaming main files to a new basename.
+
+### Basic Usage
+
+```bash
+./src/fork_kicad_project.sh <source_project_dir> <new_project_basename> [<destination_parent_dir>]
+```
+
+#### Examples
+
+**Create a sibling folder next to the source:**
+```bash
+./src/fork_kicad_project.sh ./esp32_wroom esp32_s3_wroom
+```
+
+**Put the new project elsewhere:**
+```bash
+./src/fork_kicad_project.sh ~/hw/esp32_wroom esp32_s3_wroom ~/hw/forks
+```
+
+### What it does
+- Copies the source project folder, excluding junk (locks, autosaves, VCS metadata, temp files, etc.)
+- Renames all files and directories containing the old basename to the new one (with a DPX- prefix if not present)
+- Creates an empty `<new>-backups/` folder in the new project
+- Reports on common library assets found
+
+### Notes
+- Handles absolute or relative paths
+- Hierarchical sheet filenames are not renamed automatically
+- Requires `rsync` for best results (falls back to `cp` if unavailable)
+
+If you see errors about missing directories or existing destinations, check your paths and permissions.
 <!-- REFLECTION -->
 ## Reflection
 

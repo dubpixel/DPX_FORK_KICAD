@@ -4,7 +4,14 @@ set -euo pipefail
 # fork_kicad_project.sh
 # Copy a KiCad project folder, exclude junk, and rename main files to a new basename.
 # Usage:
-#   ./fork_kicad_project.sh <source_project_dir> <new_project_basename> [<destination_parent_dir>]
+#   ./fork_kicad_project.sh <source_project_dir> <new_project_basename> [<destination_parent_dir>] [flags]
+#
+# Flags:
+#   -T 'tagline text'   Set custom tagline under project name
+#   -S 'short desc'     Set custom short description under tagline
+#   -D                  Do not change About section
+#   -R                  Do Not Change Roadmap section
+#   -I                  Remove instructions (Getting Started, Installation, Usage)
 #
 # Examples:
 #   # Create sibling folder next to source:
@@ -20,16 +27,44 @@ set -euo pipefail
 #   (Hierarchical sheets keep their filenames; change those later if you want.)
 # - Creates <new>-backups/ empty folder in the new project.
 
-echo "== KiCad Project Forker v0.2 =="
+echo "== KiCad Project Forker v0.5 =="
 
-if [[ $# -lt 2 || $# -gt 3 ]]; then
-  echo "Usage: $0 <source_project_dir> <new_project_basename> [<destination_parent_dir>]"
+
+# Parse positional args and flags
+SRC_DIR=""
+NEW_BASE=""
+DEST_PARENT=""
+TAGLINE="sassy tagline goes here"
+SHORTDESC="short description goes here to tease interest"
+CHANGE_ABOUT=1
+KEEP_ROADMAP=0
+REMOVE_INSTRUCTIONS=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -T)
+      TAGLINE="$2"; shift 2;;
+    -S)
+      SHORTDESC="$2"; shift 2;;
+    -D)
+      CHANGE_ABOUT=0; shift;;
+    -R)
+      KEEP_ROADMAP=1; shift;;
+    -I)
+      REMOVE_INSTRUCTIONS=1; shift;;
+    *)
+      if [[ -z "$SRC_DIR" ]]; then SRC_DIR="$1";
+      elif [[ -z "$NEW_BASE" ]]; then NEW_BASE="$1";
+      elif [[ -z "$DEST_PARENT" ]]; then DEST_PARENT="$1";
+      fi
+      shift;;
+  esac
+done
+
+if [[ -z "$SRC_DIR" || -z "$NEW_BASE" ]]; then
+  echo "Usage: $0 <source_project_dir> <new_project_basename> [<destination_parent_dir>] [flags]"
   exit 1
 fi
-
-SRC_DIR="$1"
-NEW_BASE="$2"
-DEST_PARENT="${3:-}"
 
 # Resolve paths
 if ! command -v realpath >/dev/null 2>&1; then
@@ -141,6 +176,9 @@ if [[ ! "$NEW_BASE" =~ ^DPX[-_] ]]; then
   echo "   Adding DPX- prefix to filenames: $FILE_BASE"
 fi
 
+# Lowercase new project name for README replacement
+NEW_BASE_LC="$(echo "$NEW_BASE" | tr '[:upper:]' '[:lower:]')"
+
 # Function to rename all files and directories containing the old basename
 rename_all_occurrences () {
   local found_count=0
@@ -221,6 +259,41 @@ for d in "${DIR_HINTS[@]}"; do
 done
 if [[ $FOUND_ANY -eq 0 ]]; then
   echo "   No obvious local libraries detected (that's fine if you use global libs)."
+fi
+
+
+# === README SANITIZATION ===
+README_PATH="$DEST_DIR_ABS/README.md"
+if [[ -f "$README_PATH" ]]; then
+  echo
+  echo ">> Sanitizing README.md..."
+  # 1. Replace all instances of old project name with new (lowercase)
+  sed -i.bak "s/$OLD_BASE/$NEW_BASE_LC/gI" "$README_PATH"
+
+  # 2a. Tagline under project name (h3 under h1)
+  sed -i "0,/^<h3.*>.*<\/h3>/s//<h3 align=\"center\"><i>$TAGLINE<\/i><\/h3>/" "$README_PATH"
+
+  # 2b. Short description (first <p align="center"> block)
+  sed -i "0,/^  <p align=\"center\">.*$/s//  <p align=\"center\">\n    $SHORTDESC/" "$README_PATH"
+
+  # 2c. About section
+  if [[ $CHANGE_ABOUT -eq 1 ]]; then
+    TODAY="$(date '+%Y-%m-%d')"
+    sed -i "0,/^fork.*$/s//forked from project '$OLD_BASE' on $TODAY/" "$README_PATH"
+  fi
+
+
+  # 2d. Clear roadmap contents unless -R (leave header, insert '[ ] -')
+  if [[ $KEEP_ROADMAP -eq 0 ]]; then
+    awk 'BEGIN{roadmap=0} /^## Roadmap/{print;print "\n- [ ] -\n";roadmap=1;next} /^## /{roadmap=0} {if(!roadmap)print}' "$README_PATH" > "$README_PATH.tmp" && mv "$README_PATH.tmp" "$README_PATH"
+  fi
+
+  # 2e. Clear instructions if -I (leave headers, insert '*')
+  if [[ $REMOVE_INSTRUCTIONS -eq 1 ]]; then
+    awk 'BEGIN{gs=0;inst=0} /^## Getting Started/{print;print "\n*\n";gs=1;next} /^## Installation/{print;print "\n*\n";inst=1;next} /^## Usage/{print;print "\n*\n";inst=1;next} /^## /{gs=0;inst=0} {if(!gs&&!inst)print}' "$README_PATH" > "$README_PATH.tmp" && mv "$README_PATH.tmp" "$README_PATH"
+  fi
+
+  echo "   README.md sanitized."
 fi
 
 echo
