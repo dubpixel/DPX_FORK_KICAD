@@ -39,7 +39,7 @@
     <img src="images/logo.png" alt="Logo" height="120">
   </a>
 <h1 align="center">dpx_fork_kicad</h1>
-<h3 align="center"><i>fork that 'dog yo</i></h3>
+<h3 align="center"><i>fork that 'dog yo<</i></h3>
   <p align="center">
     ...fork your kicad project quickly and with maximum fork!
     <br />

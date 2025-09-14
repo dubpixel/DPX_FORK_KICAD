@@ -12,6 +12,7 @@ set -euo pipefail
 #   -D                  Do not change About section
 #   -R                  Do Not Change Roadmap section
 #   -I                  Remove instructions (Getting Started, Installation, Usage)
+#   -A                  Copy archive folders (normally excluded)
 #
 # Examples:
 #   # Create sibling folder next to source:
@@ -39,6 +40,7 @@ SHORTDESC="short description goes here to tease interest"
 CHANGE_ABOUT=1
 KEEP_ROADMAP=0
 REMOVE_INSTRUCTIONS=0
+COPY_ARCHIVES=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -52,6 +54,8 @@ while [[ $# -gt 0 ]]; do
       KEEP_ROADMAP=1; shift;;
     -I)
       REMOVE_INSTRUCTIONS=1; shift;;
+    -A)
+      COPY_ARCHIVES=1; shift;;
     *)
       if [[ -z "$SRC_DIR" ]]; then SRC_DIR="$1";
       elif [[ -z "$NEW_BASE" ]]; then NEW_BASE="$1";
@@ -100,25 +104,23 @@ if [[ -e "$DEST_DIR_ABS" ]]; then
   exit 3
 fi
 
-# Find the old project basename (search for .kicad_pro files anywhere in the project)
+# Find the old project basename - always use the folder name
 echo ">> Detecting project files in source..."
+OLD_BASE="$(basename "$SRC_DIR_ABS")"
+echo "   Using folder name as project basename: $OLD_BASE"
+
+# Convert to lowercase for file matching (files are typically lowercase)
+OLD_BASE_LC="$(echo "$OLD_BASE" | tr '[:upper:]' '[:lower:]')"
+echo "   Looking for files containing: $OLD_BASE_LC"
+
+# Check for .kicad_pro files (for informational purposes only)
 PRO_FILES=()
 while IFS= read -r -d '' file; do
   PRO_FILES+=("$file")
 done < <(find "$SRC_DIR_ABS" -name "*.kicad_pro" -print0 2>/dev/null)
 
-OLD_BASE=""
-if [[ ${#PRO_FILES[@]} -eq 1 ]]; then
-  OLD_BASE="$(basename "${PRO_FILES[0]}" .kicad_pro)"
-  echo "   Detected project basename: $OLD_BASE"
-elif [[ ${#PRO_FILES[@]} -gt 1 ]]; then
-  echo "   Found ${#PRO_FILES[@]} .kicad_pro files. Using the first one as main project."
-  OLD_BASE="$(basename "${PRO_FILES[0]}" .kicad_pro)"
-  echo "   Using project basename: $OLD_BASE"
-else
-  echo "   Could not find any .kicad_pro files."
-  echo "   Falling back to directory name as basename."
-  OLD_BASE="$(basename "$SRC_DIR_ABS")"
+if [[ ${#PRO_FILES[@]} -gt 0 ]]; then
+  echo "   Found ${#PRO_FILES[@]} .kicad_pro file(s) (will be renamed with folder)"
 fi
 
 echo
@@ -126,26 +128,34 @@ echo ">> Copying project folder (excluding junk)..."
 
 # Prefer rsync for selective copy
 if command -v rsync >/dev/null 2>&1; then
-  rsync -av \
-    --exclude '.git/' \
-    --exclude '.svn/' \
-    --exclude '.hg/' \
-    --exclude '.idea/' \
-    --exclude '.vscode/' \
-    --exclude '__pycache__/' \
-    --exclude '*.lock' \
-    --exclude '*-backups/' \
-    --exclude '*.kicad_sch-bak' \
-    --exclude '*~' \
-    --exclude '~*' \
-    --exclude '_*' \
-    --exclude '#*' \
-    --exclude '*_old' \
-    --exclude '*_old.*' \
-    --exclude '*.tmp' \
-    --exclude '*.bak' \
-    --exclude '*.autosave*' \
-    "$SRC_DIR_ABS"/ "$DEST_DIR_ABS"/
+  RSYNC_EXCLUDES=(
+    --exclude '.git/'
+    --exclude '.svn/'
+    --exclude '.hg/'
+    --exclude '.idea/'
+    --exclude '.vscode/'
+    --exclude '__pycache__/'
+    --exclude '*.lock'
+    --exclude '*-backups/'
+    --exclude '*.kicad_sch-bak'
+    --exclude '*~'
+    --exclude '~*'
+    --exclude '_*'
+    --exclude '#*'
+    --exclude '*_old'
+    --exclude '*_old.*'
+    --exclude '*.tmp'
+    --exclude '*.bak'
+    --exclude '*.autosave*'
+  )
+  
+  # Exclude archive folders unless -A flag is used
+  if [[ $COPY_ARCHIVES -eq 0 ]]; then
+    RSYNC_EXCLUDES+=(--exclude '**/archive/' --exclude '**/archives/')
+    echo "   Excluding archive folders (use -A to include)"
+  fi
+  
+  rsync -av "${RSYNC_EXCLUDES[@]}" "$SRC_DIR_ABS"/ "$DEST_DIR_ABS"/
 else
   echo "   rsync not found, using cp -R (less selective)."
   mkdir -p "$DEST_DIR_ABS"
@@ -164,17 +174,29 @@ else
   find "$DEST_DIR_ABS" -name '*.tmp' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*.bak' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*-backups' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+  
+  # Remove archive folders unless -A flag is used
+  if [[ $COPY_ARCHIVES -eq 0 ]]; then
+    find "$DEST_DIR_ABS" -type d -name "archive" -exec rm -rf {} + 2>/dev/null || true
+    find "$DEST_DIR_ABS" -type d -name "archives" -exec rm -rf {} + 2>/dev/null || true
+    echo "   Removed archive folders (use -A to include)"
+  fi
 fi
 
 echo
 echo ">> Renaming ALL files and directories containing old basename..."
 
-# Add DPX- prefix to filenames if not already present
-FILE_BASE="$NEW_BASE"
-if [[ ! "$NEW_BASE" =~ ^DPX[-_] ]]; then
-  FILE_BASE="DPX-$NEW_BASE"
-  echo "   Adding DPX- prefix to filenames: $FILE_BASE"
+# Add dpx_ prefix to filenames if not already present - use lowercase for files
+FILE_BASE_LC="$(echo "$NEW_BASE" | tr '[:upper:]' '[:lower:]')"
+if [[ ! "$FILE_BASE_LC" =~ ^dpx[-_] ]]; then
+  FILE_BASE="dpx_$FILE_BASE_LC"
+  echo "   Adding dpx_ prefix to filenames: $FILE_BASE"
+else
+  FILE_BASE="$FILE_BASE_LC"
 fi
+
+# Lowercase old project name for matching
+OLD_BASE_LC="$(echo "$OLD_BASE" | tr '[:upper:]' '[:lower:]')"
 
 # Lowercase new project name for README replacement
 NEW_BASE_LC="$(echo "$NEW_BASE" | tr '[:upper:]' '[:lower:]')"
@@ -182,37 +204,53 @@ NEW_BASE_LC="$(echo "$NEW_BASE" | tr '[:upper:]' '[:lower:]')"
 # Function to rename all files and directories containing the old basename
 rename_all_occurrences () {
   local found_count=0
-  
+
   # First, rename directories (bottom-up to avoid path issues)
   echo "   Renaming directories..."
   while IFS= read -r -d '' dir_path; do
+    if [[ -z "$dir_path" ]]; then continue; fi
     local parent_dir="$(dirname "$dir_path")"
     local old_name="$(basename "$dir_path")"
-    local new_name="${old_name/$OLD_BASE/$FILE_BASE}"
-    
-    if [[ "$old_name" != "$new_name" ]]; then
+
+    # Skip archive folders - never rename them
+    if [[ "$old_name" == "archive" || "$old_name" == "archives" ]]; then
+      echo "     Skipping archive folder: $old_name"
+      continue
+    fi
+
+    local new_name="${old_name/$OLD_BASE_LC/$FILE_BASE}"
+
+    if [[ -n "$old_name" && -n "$new_name" && "$old_name" != "$new_name" ]]; then
       echo "     $old_name -> $new_name"
       mv "$dir_path" "$parent_dir/$new_name"
       ((found_count++))
     fi
-  done < <(find "$DEST_DIR_ABS" -type d -name "*$OLD_BASE*" -print0 2>/dev/null | sort -z -r)
-  
+  done < <(find "$DEST_DIR_ABS" -type d -name "*$OLD_BASE_LC*" -print0 2>/dev/null | sort -z -r)
+
   # Then rename files
   echo "   Renaming files..."
   while IFS= read -r -d '' file_path; do
+    if [[ -z "$file_path" ]]; then continue; fi
     local parent_dir="$(dirname "$file_path")"
     local old_name="$(basename "$file_path")"
-    local new_name="${old_name/$OLD_BASE/$FILE_BASE}"
-    
-    if [[ "$old_name" != "$new_name" ]]; then
+
+    # Skip files in archive folders - never rename them
+    if [[ "$file_path" == */archive/* || "$file_path" == */archives/* ]]; then
+      echo "     Skipping file in archive folder: $old_name"
+      continue
+    fi
+
+    local new_name="${old_name/$OLD_BASE_LC/$FILE_BASE}"
+
+    if [[ -n "$old_name" && -n "$new_name" && "$old_name" != "$new_name" ]]; then
       echo "     $old_name -> $new_name"
       mv "$file_path" "$parent_dir/$new_name"
       ((found_count++))
     fi
-  done < <(find "$DEST_DIR_ABS" -type f -name "*$OLD_BASE*" -print0 2>/dev/null)
-  
+  done < <(find "$DEST_DIR_ABS" -type f -name "*$OLD_BASE_LC*" -print0 2>/dev/null)
+
   if [[ $found_count -eq 0 ]]; then
-    echo "   (skip) No files or directories containing '$OLD_BASE' found"
+    echo "   (skip) No files or directories containing '$OLD_BASE_LC' found"
   else
     echo "   Renamed $found_count items"
   fi
@@ -267,19 +305,26 @@ README_PATH="$DEST_DIR_ABS/README.md"
 if [[ -f "$README_PATH" ]]; then
   echo
   echo ">> Sanitizing README.md..."
-  # 1. Replace all instances of old project name with new (lowercase)
-  sed -i.bak "s/$OLD_BASE/$NEW_BASE_LC/gI" "$README_PATH"
+  
+  # Debug output
+  echo "   DEBUG: OLD_BASE='$OLD_BASE'"
+  echo "   DEBUG: NEW_BASE='$NEW_BASE'"
+  echo "   DEBUG: NEW_BASE_LC='$NEW_BASE_LC'"
+  
+  # 1. Replace all instances of old project name with new (lowercase) - simple approach like dpx_newProject.sh
+  echo "   Replacing '$OLD_BASE' with '$NEW_BASE_LC' (lowercase)"
+  sed -i '' "s/$OLD_BASE/$NEW_BASE_LC/g" "$README_PATH"
 
   # 2a. Tagline under project name (h3 under h1)
-  sed -i "0,/^<h3.*>.*<\/h3>/s//<h3 align=\"center\"><i>$TAGLINE<\/i><\/h3>/" "$README_PATH"
+  sed -i '' "0,/^<h3.*>.*<\/h3>/s//<h3 align=\"center\"><i>$TAGLINE<\/i><\/h3>/" "$README_PATH"
 
   # 2b. Short description (first <p align="center"> block)
-  sed -i "0,/^  <p align=\"center\">.*$/s//  <p align=\"center\">\n    $SHORTDESC/" "$README_PATH"
+  sed -i '' "0,/^  <p align=\"center\">.*$/s//  <p align=\"center\">\n    $SHORTDESC/" "$README_PATH"
 
   # 2c. About section
   if [[ $CHANGE_ABOUT -eq 1 ]]; then
     TODAY="$(date '+%Y-%m-%d')"
-    sed -i "0,/^fork.*$/s//forked from project '$OLD_BASE' on $TODAY/" "$README_PATH"
+    sed -i '' "0,/^fork.*$/s//forked from project '$OLD_BASE' on $TODAY/" "$README_PATH"
   fi
 
 
