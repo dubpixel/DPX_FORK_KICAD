@@ -65,6 +65,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Strip trailing slashes from NEW_BASE
+NEW_BASE="${NEW_BASE%/}"
+
 if [[ -z "$SRC_DIR" || -z "$NEW_BASE" ]]; then
   echo "Usage: $0 <source_project_dir> <new_project_basename> [<destination_parent_dir>] [flags]"
   echo ""
@@ -232,8 +235,8 @@ rename_all_occurrences () {
       continue
     fi
 
-    # Case-insensitive replacement using sed
-    local new_name=$(echo "$old_name" | sed "s/$OLD_BASE_LC/$FILE_BASE/gi")
+    # Case-insensitive replacement using sed with | delimiter to avoid / conflicts
+    local new_name=$(echo "$old_name" | sed "s|$OLD_BASE_LC|$FILE_BASE|gi")
 
     if [[ -n "$old_name" && -n "$new_name" && "$old_name" != "$new_name" ]]; then
       echo "     $old_name -> $new_name"
@@ -255,8 +258,8 @@ rename_all_occurrences () {
       continue
     fi
 
-    # Case-insensitive replacement using sed
-    local new_name=$(echo "$old_name" | sed "s/$OLD_BASE_LC/$FILE_BASE/gi")
+    # Case-insensitive replacement using sed with | delimiter to avoid / conflicts
+    local new_name=$(echo "$old_name" | sed "s|$OLD_BASE_LC|$FILE_BASE|gi")
 
     if [[ -n "$old_name" && -n "$new_name" && "$old_name" != "$new_name" ]]; then
       echo "     $old_name -> $new_name"
@@ -329,7 +332,7 @@ if [[ -f "$README_PATH" ]]; then
   
   # 1. Replace all instances of old project name with new (lowercase) - simple approach like dpx_newProject.sh
   echo "   Replacing '$OLD_BASE' with '$NEW_BASE_LC' (lowercase)"
-  sed -i '' "s/$OLD_BASE/$NEW_BASE_LC/g" "$README_PATH"
+  sed -i '' "s|$OLD_BASE|$NEW_BASE_LC|gi" "$README_PATH"
 
   # 2a. Tagline under project name (h3 under h1)
   sed -i '' "0,/^<h3.*>.*<\/h3>/s//<h3 align=\"center\"><i>$TAGLINE<\/i><\/h3>/" "$README_PATH"
@@ -340,7 +343,7 @@ if [[ -f "$README_PATH" ]]; then
   # 2c. About section
   if [[ $CHANGE_ABOUT -eq 1 ]]; then
     TODAY="$(date '+%Y-%m-%d')"
-    sed -i '' "0,/^fork.*$/s//forked from project '$OLD_BASE' on $TODAY/" "$README_PATH"
+    sed -i '' "0,/^fork.*$/s||forked from project '$OLD_BASE' on $TODAY|" "$README_PATH"
   fi
 
 
