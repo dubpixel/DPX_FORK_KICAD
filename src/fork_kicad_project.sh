@@ -67,6 +67,20 @@ done
 
 if [[ -z "$SRC_DIR" || -z "$NEW_BASE" ]]; then
   echo "Usage: $0 <source_project_dir> <new_project_basename> [<destination_parent_dir>] [flags]"
+  echo ""
+  echo "Flags:"
+  echo "  -T 'tagline text'   Set custom tagline under project name in README"
+  echo "  -S 'short desc'     Set custom short description under tagline in README"
+  echo "  -D                  Do not change About section (preserve original content)"
+  echo "  -R                  Do Not Change Roadmap section (preserve original roadmap)"
+  echo "  -I                  Remove instructions (Getting Started, Installation, Usage sections)"
+  echo "  -A                  Copy archive folders (normally excluded for cleaner projects)"
+  echo ""
+  echo "Examples:"
+  echo "  $0 ./esp32_wroom esp32_s3_wroom"
+  echo "  $0 ./esp32_wroom esp32_s3_wroom ~/hw/forks"
+  echo "  $0 ./my_project new_project -T 'blazing fast' -S 'improved version'"
+  echo "  $0 ./my_project clean_project -D -R -I"
   exit 1
 fi
 

@@ -146,10 +146,21 @@ This script helps you fork a KiCad project folder, excluding junk files and rena
 ### Basic Usage
 
 ```bash
-./src/fork_kicad_project.sh <source_project_dir> <new_project_basename> [<destination_parent_dir>]
+./src/fork_kicad_project.sh <source_project_dir> <new_project_basename> [<destination_parent_dir>] [flags]
 ```
 
-#### Examples
+### Available Flags
+
+| Flag | Description |
+|------|-------------|
+| `-T 'tagline text'` | Set custom tagline under project name in README |
+| `-S 'short desc'` | Set custom short description under tagline in README |
+| `-D` | Do not change About section (preserve original content) |
+| `-R` | Do Not Change Roadmap section (preserve original roadmap) |
+| `-I` | Remove instructions (Getting Started, Installation, Usage sections) |
+| `-A` | Copy archive folders (normally excluded for cleaner projects) |
+
+### Examples
 
 **Create a sibling folder next to the source:**
 ```bash
@@ -159,6 +170,26 @@ This script helps you fork a KiCad project folder, excluding junk files and rena
 **Put the new project elsewhere:**
 ```bash
 ./src/fork_kicad_project.sh ~/hw/esp32_wroom esp32_s3_wroom ~/hw/forks
+```
+
+**Fork with custom tagline and description:**
+```bash
+./src/fork_kicad_project.sh ./esp32_wroom esp32_s3_wroom -T "blazing fast wireless" -S "upgraded ESP32-S3 version with improved performance"
+```
+
+**Fork without changing About/Roadmap sections:**
+```bash
+./src/fork_kicad_project.sh ./my_project new_project -D -R
+```
+
+**Fork and remove installation instructions:**
+```bash
+./src/fork_kicad_project.sh ./my_project clean_project -I
+```
+
+**Fork including archive folders:**
+```bash
+./src/fork_kicad_project.sh ./my_project backup_project -A
 ```
 
 ### What it does
