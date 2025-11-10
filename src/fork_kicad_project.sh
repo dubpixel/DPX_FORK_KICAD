@@ -101,7 +101,7 @@ else
   DEST_PARENT_ABS="$(realpath "$DEST_PARENT")"
 fi
 
-DEST_DIR_ABS="$DEST_PARENT_ABS/$NEW_BASE"
+DEST_DIR_ABS="$DEST_PARENT_ABS/$(echo "$NEW_BASE" | tr '[:lower:]' '[:upper:]')"
 
 echo "-- Source:      $SRC_DIR_ABS"
 echo "-- New basename: $NEW_BASE"
@@ -232,14 +232,15 @@ rename_all_occurrences () {
       continue
     fi
 
-    local new_name="${old_name/$OLD_BASE_LC/$FILE_BASE}"
+    # Case-insensitive replacement using sed
+    local new_name=$(echo "$old_name" | sed "s/$OLD_BASE_LC/$FILE_BASE/gi")
 
     if [[ -n "$old_name" && -n "$new_name" && "$old_name" != "$new_name" ]]; then
       echo "     $old_name -> $new_name"
       mv "$dir_path" "$parent_dir/$new_name"
       ((found_count++))
     fi
-  done < <(find "$DEST_DIR_ABS" -type d -name "*$OLD_BASE_LC*" -print0 2>/dev/null | sort -z -r)
+  done < <(find "$DEST_DIR_ABS" -type d \( -iname "*$OLD_BASE_LC*" \) -print0 2>/dev/null | sort -z -r)
 
   # Then rename files
   echo "   Renaming files..."
@@ -254,14 +255,15 @@ rename_all_occurrences () {
       continue
     fi
 
-    local new_name="${old_name/$OLD_BASE_LC/$FILE_BASE}"
+    # Case-insensitive replacement using sed
+    local new_name=$(echo "$old_name" | sed "s/$OLD_BASE_LC/$FILE_BASE/gi")
 
     if [[ -n "$old_name" && -n "$new_name" && "$old_name" != "$new_name" ]]; then
       echo "     $old_name -> $new_name"
       mv "$file_path" "$parent_dir/$new_name"
       ((found_count++))
     fi
-  done < <(find "$DEST_DIR_ABS" -type f -name "*$OLD_BASE_LC*" -print0 2>/dev/null)
+  done < <(find "$DEST_DIR_ABS" -type f \( -iname "*$OLD_BASE_LC*" \) -print0 2>/dev/null)
 
   if [[ $found_count -eq 0 ]]; then
     echo "   (skip) No files or directories containing '$OLD_BASE_LC' found"
