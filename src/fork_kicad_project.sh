@@ -65,8 +65,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Strip trailing slashes from NEW_BASE
+# Strip leading/trailing slashes, dots, and spaces from NEW_BASE
+NEW_BASE="${NEW_BASE#/}"
 NEW_BASE="${NEW_BASE%/}"
+NEW_BASE="${NEW_BASE#.}"
+NEW_BASE="${NEW_BASE%.}"
+NEW_BASE="${NEW_BASE// /}"
 
 if [[ -z "$SRC_DIR" || -z "$NEW_BASE" ]]; then
   echo "Usage: $0 <source_project_dir> <new_project_basename> [<destination_parent_dir>] [flags]"
@@ -232,59 +236,53 @@ rename_all_occurrences () {
     # Skip archive folders - never rename them
     if [[ "$old_name" == "archive" || "$old_name" == "archives" ]]; then
       echo "     Skipping archive folder: $old_name"
-      continue
-    fi
+      rename_all_occurrences () {
+        local found_count=0
 
-    # Case-insensitive replacement using sed with | delimiter to avoid / conflicts
-    local new_name=$(echo "$old_name" | sed "s|$OLD_BASE_LC|$FILE_BASE|gi")
+        # Rename directories (bottom-up, deepest first)
+        echo "   Renaming directories..."
+        find "$DEST_DIR_ABS" -depth -type d | while read -r dir_path; do
+          local parent_dir="$(dirname "$dir_path")"
+          local old_name="$(basename "$dir_path")"
+          # Skip archive folders - never rename them
+          if [[ "$old_name" == "archive" || "$old_name" == "archives" ]]; then
+            echo "     Skipping archive folder: $old_name"
+            continue
+          fi
+          # Case-insensitive replacement
+          local new_name=$(echo "$old_name" | awk -v old="$OLD_BASE" -v new="$FILE_BASE_LC" '{IGNORECASE=1; gsub(old, new); print $0;}')
+          if [[ "$old_name" != "$new_name" ]]; then
+            echo "     $old_name -> $new_name"
+            mv "$dir_path" "$parent_dir/$new_name"
+            ((found_count++))
+          fi
+        done
 
-    if [[ -n "$old_name" && -n "$new_name" && "$old_name" != "$new_name" ]]; then
-      echo "     $old_name -> $new_name"
-      mv "$dir_path" "$parent_dir/$new_name"
-      ((found_count++))
-    fi
-  done < <(find "$DEST_DIR_ABS" -type d \( -iname "*$OLD_BASE_LC*" \) -print0 2>/dev/null | sort -z -r)
+        # Rename files
+        echo "   Renaming files..."
+        find "$DEST_DIR_ABS" -type f | while read -r file_path; do
+          local parent_dir="$(dirname "$file_path")"
+          local old_name="$(basename "$file_path")"
+          # Skip files in archive folders - never rename them
+          if [[ "$file_path" == */archive/* || "$file_path" == */archives/* ]]; then
+            echo "     Skipping file in archive folder: $old_name"
+            continue
+          fi
+          # Case-insensitive replacement
+          local new_name=$(echo "$old_name" | awk -v old="$OLD_BASE" -v new="$FILE_BASE_LC" '{IGNORECASE=1; gsub(old, new); print $0;}')
+          if [[ "$old_name" != "$new_name" ]]; then
+            echo "     $old_name -> $new_name"
+            mv "$file_path" "$parent_dir/$new_name"
+            ((found_count++))
+          fi
+        done
 
-  # Then rename files
-  echo "   Renaming files..."
-  while IFS= read -r -d '' file_path; do
-    if [[ -z "$file_path" ]]; then continue; fi
-    local parent_dir="$(dirname "$file_path")"
-    local old_name="$(basename "$file_path")"
-
-    # Skip files in archive folders - never rename them
-    if [[ "$file_path" == */archive/* || "$file_path" == */archives/* ]]; then
-      echo "     Skipping file in archive folder: $old_name"
-      continue
-    fi
-
-    # Case-insensitive replacement using sed with | delimiter to avoid / conflicts
-    local new_name=$(echo "$old_name" | sed "s|$OLD_BASE_LC|$FILE_BASE|gi")
-
-    if [[ -n "$old_name" && -n "$new_name" && "$old_name" != "$new_name" ]]; then
-      echo "     $old_name -> $new_name"
-      mv "$file_path" "$parent_dir/$new_name"
-      ((found_count++))
-    fi
-  done < <(find "$DEST_DIR_ABS" -type f \( -iname "*$OLD_BASE_LC*" \) -print0 2>/dev/null)
-
-  if [[ $found_count -eq 0 ]]; then
-    echo "   (skip) No files or directories containing '$OLD_BASE_LC' found"
-  else
-    echo "   Renamed $found_count items"
-  fi
-}
-
-rename_all_occurrences
-
-echo
-echo ">> Creating backups folder..."
-mkdir -p "$DEST_DIR_ABS/${FILE_BASE}-backups"
-echo "   Created: $DEST_DIR_ABS/${FILE_BASE}-backups"
-
-echo
-echo ">> Verifying common library assets..."
-# This section doesn't change anything—just reports what's present so you know it copied.
+        if [[ $found_count -eq 0 ]]; then
+          echo "   (skip) No files or directories containing '$OLD_BASE_LC' found"
+        else
+          echo "   Renamed $found_count items"
+        fi
+      }
 declare -a LIB_HINTS=(
   "*.kicad_sym"
   "*.lib"
