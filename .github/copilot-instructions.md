@@ -1,10 +1,10 @@
-# Copilot Coding Agent Instructions for DPX_FORK_KICAD
+# Copilot Coding Agent Instructions for DPX Project Forker
 
 > **Trust these instructions.** Only search the codebase if information here is incomplete or found to be incorrect.
 
 ## Repository Summary
 
-**DPX_FORK_KICAD** is a bash script utility for forking KiCad hardware project folders. It copies a source KiCad project directory, excludes junk files (locks, autosaves, VCS metadata, temp files), renames all files/directories containing the old project basename to a new one, and sanitizes the README.md with customizable content.
+**DPX Project Forker** (repo: `DPX_FORK_KICAD`) is a bash script utility for forking project folders. Originally designed for KiCad hardware projects, it works with any project type. It copies a source project directory, excludes junk files (locks, autosaves, VCS metadata, temp files), renames all files/directories containing the old project basename to a new one, and sanitizes the README.md with customizable content.
 
 | Attribute | Value |
 |-----------|-------|
@@ -177,20 +177,14 @@ Commit `c2f91cd` ("fixed rename issues") broke the script. An edit intended to i
 
 ### Repair Plan (Two Phases)
 
-**Phase A — Restore to working state:**
-1. Restore `src/fork_kicad_project.sh` to commit `d487603`
-2. Add the expanded input sanitization from c2f91cd (the good part):
-   ```bash
-   NEW_BASE="${NEW_BASE#/}"
-   NEW_BASE="${NEW_BASE%/}"
-   NEW_BASE="${NEW_BASE#.}"
-   NEW_BASE="${NEW_BASE%.}"
-   NEW_BASE="${NEW_BASE// /}"
-   ```
-3. Validate with `bash -n src/fork_kicad_project.sh`
-4. Test with a real KiCad project folder
+**Phase A — Restore to working state:** ✅ COMPLETE (v0.6.0)
+1. ✅ Restored `src/fork_kicad_project.sh` to commit `d487603`
+2. ✅ Added the expanded input sanitization
+3. ✅ Validated with `bash -n src/fork_kicad_project.sh`
+4. ✅ Tested with real KiCad project (DPX_RADIAL_TWO → DPX_TIMEDOG)
+5. ✅ Added VERSION variable and -v/--version flag
 
-**Phase B — Improve with pipe-based approach (optional, after A works):**
+**Phase B — Improve with pipe-based approach (next):**
 1. Rewrite `rename_all_occurrences()` using pipes instead of process substitution
 2. Use `find -depth -type d | while read` for bottom-up directory traversal
 3. Use `awk '{IGNORECASE=1; gsub(old, new)}'` for case-insensitive replacement
@@ -212,3 +206,16 @@ Commit `c2f91cd` ("fixed rename issues") broke the script. An edit intended to i
 - `FILE_BASE` — new filename base with `dpx_` prefix (lowercase)
 - `FILE_BASE_LC` — same as FILE_BASE (already lowercase)
 - `NEW_BASE_LC` — lowercase new base for README replacement
+
+---
+
+## Future Roadmap
+
+| Priority | Feature | Notes |
+|----------|---------|-------|
+| 1 | Phase B: Pipe-based rename rewrite | More portable, avoids process substitution |
+| 2 | Sanitize production files on fork | Clear out old gerbers, BOMs, etc. |
+| 3 | Option to delete schematic PDFs | `-P` flag? |
+| 4 | Option to cleanup/reset images directory | Keep logo, clear product photos |
+| 5 | Rename nested hierarchical schematic sheets | Update internal KiCad references |
+| 6 | Rename script/repo | Works for non-KiCad projects too |
