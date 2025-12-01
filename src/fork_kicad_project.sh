@@ -174,12 +174,24 @@ echo ">> Copying project folder (excluding junk)..."
 # Prefer rsync for selective copy
 if command -v rsync >/dev/null 2>&1; then
   RSYNC_EXCLUDES=(
+    # VCS metadata
     --exclude '.git/'
     --exclude '.svn/'
     --exclude '.hg/'
+    # IDE/editor
     --exclude '.idea/'
     --exclude '.vscode/'
+    # Build artifacts (code projects)
+    --exclude 'build/'
+    --exclude 'dist/'
+    --exclude 'node_modules/'
+    --exclude '.cache/'
+    --exclude '*.o'
+    --exclude '*.pyc'
     --exclude '__pycache__/'
+    --exclude '.pio/'
+    --exclude '.pioenvs/'
+    # Temp/backup files
     --exclude '*.lock'
     --exclude '*-backups/'
     --exclude '*.kicad_sch-bak'
@@ -206,8 +218,16 @@ else
   mkdir -p "$DEST_DIR_ABS"
   cp -R "$SRC_DIR_ABS"/. "$DEST_DIR_ABS"/
   echo "   Removing known junk from copy..."
+  # VCS and IDE
   rm -rf "$DEST_DIR_ABS/.git" "$DEST_DIR_ABS/.svn" "$DEST_DIR_ABS/.hg" \
-         "$DEST_DIR_ABS/.idea" "$DEST_DIR_ABS/.vscode" "$DEST_DIR_ABS/__pycache__" 2>/dev/null || true
+         "$DEST_DIR_ABS/.idea" "$DEST_DIR_ABS/.vscode" 2>/dev/null || true
+  # Build artifacts
+  rm -rf "$DEST_DIR_ABS/__pycache__" "$DEST_DIR_ABS/build" "$DEST_DIR_ABS/dist" \
+         "$DEST_DIR_ABS/node_modules" "$DEST_DIR_ABS/.cache" \
+         "$DEST_DIR_ABS/.pio" "$DEST_DIR_ABS/.pioenvs" 2>/dev/null || true
+  find "$DEST_DIR_ABS" -name '*.o' -delete 2>/dev/null || true
+  find "$DEST_DIR_ABS" -name '*.pyc' -delete 2>/dev/null || true
+  # Temp/backup files
   find "$DEST_DIR_ABS" -name '*.lock' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*.kicad_sch-bak' -delete 2>/dev/null || true
   find "$DEST_DIR_ABS" -name '*~' -delete 2>/dev/null || true
