@@ -213,9 +213,10 @@ Commit `c2f91cd` ("fixed rename issues") broke the script. An edit intended to i
 
 | Priority | Feature | Notes |
 |----------|---------|-------|
-| 1 | Phase B: Pipe-based rename rewrite | More portable, avoids process substitution |
-| 2 | Sanitize production files on fork | Clear out old gerbers, BOMs, etc. |
-| 3 | Option to delete schematic PDFs | `-P` flag? |
-| 4 | Option to cleanup/reset images directory | Keep logo, clear product photos |
-| 5 | Rename nested hierarchical schematic sheets | Update internal KiCad references |
-| 6 | Rename script/repo | Works for non-KiCad projects too |
+| 1 | Sanitize production files on fork | Clear out old gerbers, BOMs, etc. |
+| 2 | Option to delete schematic PDFs | `-P` flag? |
+| 3 | Option to cleanup/reset images directory | Keep logo, clear product photos |
+| 4 | Rename nested hierarchical schematic sheets | Update internal KiCad references |
+| 5 | Rename script/repo | Works for non-KiCad projects too |
+
+~~Phase B (pipe-based rewrite)~~ — Skipped. Current process substitution approach works on macOS, Linux, and Windows Git Bash. No real benefit to rewriting.

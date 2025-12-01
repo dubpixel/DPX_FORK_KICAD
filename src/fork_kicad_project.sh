@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Version
-VERSION="0.6.0"
+VERSION="0.7.0"
 
 # fork_kicad_project.sh
 # Copy a KiCad project folder, exclude junk, and rename main files to a new basename.
@@ -12,10 +12,14 @@ VERSION="0.6.0"
 # Flags:
 #   -T 'tagline text'   Set custom tagline under project name
 #   -S 'short desc'     Set custom short description under tagline
-#   -D                  Do not change About section
-#   -R                  Do Not Change Roadmap section
-#   -I                  Remove instructions (Getting Started, Installation, Usage)
+#   -D                  Keep About section (don't reset)
+#   -R                  Keep Roadmap section (don't clear)
+#   -I                  Keep instructions (don't remove Getting Started, etc.)
 #   -A                  Copy archive folders (normally excluded)
+#   -P                  Keep production files (don't sanitize jlcpcb/)
+#   -M                  Keep images (don't reset images/ folder)
+#   -W                  Keep original tagline/shortdesc from source
+#   -K                  Keep ALL (= -P -M -D -R -I -W combined)
 #
 # Examples:
 #   # Create sibling folder next to source:
@@ -42,8 +46,11 @@ TAGLINE="sassy tagline goes here"
 SHORTDESC="short description goes here to tease interest"
 CHANGE_ABOUT=1
 KEEP_ROADMAP=0
-REMOVE_INSTRUCTIONS=0
+KEEP_INSTRUCTIONS=0
 COPY_ARCHIVES=0
+KEEP_PRODUCTION=0
+KEEP_IMAGES=0
+KEEP_TAGLINE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -58,9 +65,17 @@ while [[ $# -gt 0 ]]; do
     -R)
       KEEP_ROADMAP=1; shift;;
     -I)
-      REMOVE_INSTRUCTIONS=1; shift;;
+      KEEP_INSTRUCTIONS=1; shift;;
     -A)
       COPY_ARCHIVES=1; shift;;
+    -P)
+      KEEP_PRODUCTION=1; shift;;
+    -M)
+      KEEP_IMAGES=1; shift;;
+    -W)
+      KEEP_TAGLINE=1; shift;;
+    -K)
+      KEEP_PRODUCTION=1; KEEP_IMAGES=1; CHANGE_ABOUT=0; KEEP_ROADMAP=1; KEEP_INSTRUCTIONS=1; KEEP_TAGLINE=1; shift;;
     *)
       if [[ -z "$SRC_DIR" ]]; then SRC_DIR="$1";
       elif [[ -z "$NEW_BASE" ]]; then NEW_BASE="$1";
@@ -81,12 +96,16 @@ if [[ -z "$SRC_DIR" || -z "$NEW_BASE" ]]; then
   echo "Usage: $0 <source_project_dir> <new_project_basename> [<destination_parent_dir>] [flags]"
   echo ""
   echo "Flags:"
-  echo "  -T 'tagline text'   Set custom tagline under project name in README"
-  echo "  -S 'short desc'     Set custom short description under tagline in README"
-  echo "  -D                  Do not change About section (preserve original content)"
-  echo "  -R                  Do Not Change Roadmap section (preserve original roadmap)"
-  echo "  -I                  Remove instructions (Getting Started, Installation, Usage sections)"
-  echo "  -A                  Copy archive folders (normally excluded for cleaner projects)"
+  echo "  -T 'tagline text'   Set custom tagline (default: placeholder text)"
+  echo "  -S 'short desc'     Set custom short description (default: placeholder text)"
+  echo "  -D                  Keep About section (don't reset)"
+  echo "  -R                  Keep Roadmap section (don't clear)"
+  echo "  -I                  Keep instructions (don't remove Getting Started, etc.)"
+  echo "  -A                  Copy archive folders (normally excluded)"
+  echo "  -P                  Keep production files (don't sanitize jlcpcb/)"
+  echo "  -M                  Keep images (don't reset images/ folder)"
+  echo "  -W                  Keep original tagline/shortdesc from source README"
+  echo "  -K                  Keep ALL (= -D -R -I -P -M -W combined)"
   echo ""
   echo "Examples:"
   echo "  $0 ./esp32_wroom esp32_s3_wroom"
@@ -327,6 +346,75 @@ if [[ $FOUND_ANY -eq 0 ]]; then
   echo "   No obvious local libraries detected (that's fine if you use global libs)."
 fi
 
+# === PRODUCTION SANITIZE (skipped with -P flag) ===
+if [[ $KEEP_PRODUCTION -eq 0 ]]; then
+  echo
+  echo ">> Sanitizing production files..."
+  # Find and empty jlcpcb folders (contents only, keep folder structure)
+  while IFS= read -r -d '' jlcpcb_dir; do
+    if [[ -d "$jlcpcb_dir" ]]; then
+      echo "   Emptying: $jlcpcb_dir"
+      rm -rf "$jlcpcb_dir"/*
+    fi
+  done < <(find "$DEST_DIR_ABS/hardware/src" -type d -name "jlcpcb" -print0 2>/dev/null)
+  echo "   Production files sanitized."
+fi
+
+# === IMAGES RESET (skipped with -M flag) ===
+if [[ $KEEP_IMAGES -eq 0 ]]; then
+  echo
+  echo ">> Resetting images and cleaning project assets..."
+  
+  # Part A: Clean stray image files from KiCad src folder
+  echo "   Cleaning stray files from hardware/src/.../"
+  while IFS= read -r -d '' src_dir; do
+    # Only delete files at top level of src project folder, not in subdirs
+    find "$src_dir" -maxdepth 1 -type f \( \
+      -iname "*.svg" -o -iname "*.png" -o -iname "*.step" -o \
+      -iname "*.gif" -o -iname "*.jpg" -o -iname "*.jpeg" -o \
+      -iname "*.bmp" -o -iname "*.ai" \
+    \) -print0 | while IFS= read -r -d '' stray_file; do
+      echo "     Removing: $(basename "$stray_file")"
+      rm -f "$stray_file"
+    done
+  done < <(find "$DEST_DIR_ABS/hardware/src" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+  
+  # Part A2: Clean .step files from hardware/3d/ folder
+  echo "   Cleaning .step files from hardware/3d/..."
+  find "$DEST_DIR_ABS/hardware/3d" -type f -iname "*.step" -print0 2>/dev/null | while IFS= read -r -d '' step_file; do
+    echo "     Removing: $(basename "$step_file")"
+    rm -f "$step_file"
+  done
+  
+  # Part B: Reset images/ folder from template
+  echo "   Resetting images/ folder from template..."
+  
+  # Find the template images directory (same logic as dpx_newProject.sh)
+  TEMPLATE_IMAGES_DIR=""
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  current_search="$SCRIPT_DIR"
+  while [[ "$current_search" != "/" ]]; do
+    if [[ "$(basename "$current_search")" == *"CIRCUIT_PROJECTS"* ]]; then
+      if [[ -d "$current_search/_....DPX_BLANK_PROJECT_TEMPLATE/dpx_readme_template/images" ]]; then
+        TEMPLATE_IMAGES_DIR="$current_search/_....DPX_BLANK_PROJECT_TEMPLATE/dpx_readme_template/images"
+        break
+      fi
+    fi
+    current_search="$(dirname "$current_search")"
+  done
+  
+  if [[ -n "$TEMPLATE_IMAGES_DIR" && -d "$TEMPLATE_IMAGES_DIR" ]]; then
+    # Delete existing images and copy fresh from template
+    rm -rf "$DEST_DIR_ABS/images"/*
+    cp -R "$TEMPLATE_IMAGES_DIR"/* "$DEST_DIR_ABS/images"/
+    echo "   Images reset from: $TEMPLATE_IMAGES_DIR"
+  else
+    echo "   WARNING: Could not find template images directory, skipping reset."
+  fi
+  
+  echo "   Images reset complete."
+fi
+
 
 # === README SANITIZATION ===
 README_PATH="$DEST_DIR_ABS/README.md"
@@ -343,11 +431,15 @@ if [[ -f "$README_PATH" ]]; then
   echo "   Replacing '$OLD_BASE' with '$NEW_BASE_LC' (lowercase)"
   sed -i '' "s|$OLD_BASE|$NEW_BASE_LC|gi" "$README_PATH"
 
-  # 2a. Tagline under project name (h3 under h1)
-  sed -i '' "0,/^<h3.*>.*<\/h3>/s//<h3 align=\"center\"><i>$TAGLINE<\/i><\/h3>/" "$README_PATH"
+  # 2a. Tagline under project name (h3 under h1) - skipped with -W
+  if [[ $KEEP_TAGLINE -eq 0 ]]; then
+    sed -i '' "0,/^<h3.*>.*<\/h3>/s//<h3 align=\"center\"><i>$TAGLINE<\/i><\/h3>/" "$README_PATH"
+  fi
 
-  # 2b. Short description (first <p align="center"> block)
-  sed -i '' "0,/^  <p align=\"center\">.*$/s//  <p align=\"center\">\n    $SHORTDESC/" "$README_PATH"
+  # 2b. Short description (first <p align="center"> block) - skipped with -W
+  if [[ $KEEP_TAGLINE -eq 0 ]]; then
+    sed -i '' "0,/^  <p align=\"center\">.*$/s//  <p align=\"center\">\n    $SHORTDESC/" "$README_PATH"
+  fi
 
   # 2c. About section
   if [[ $CHANGE_ABOUT -eq 1 ]]; then
@@ -361,8 +453,8 @@ if [[ -f "$README_PATH" ]]; then
     awk 'BEGIN{roadmap=0} /^## Roadmap/{print;print "\n- [ ] -\n";roadmap=1;next} /^## /{roadmap=0} {if(!roadmap)print}' "$README_PATH" > "$README_PATH.tmp" && mv "$README_PATH.tmp" "$README_PATH"
   fi
 
-  # 2e. Clear instructions if -I (leave headers, insert '*')
-  if [[ $REMOVE_INSTRUCTIONS -eq 1 ]]; then
+  # 2e. Clear instructions (skipped with -I)
+  if [[ $KEEP_INSTRUCTIONS -eq 0 ]]; then
     awk 'BEGIN{gs=0;inst=0} /^## Getting Started/{print;print "\n*\n";gs=1;next} /^## Installation/{print;print "\n*\n";inst=1;next} /^## Usage/{print;print "\n*\n";inst=1;next} /^## /{gs=0;inst=0} {if(!gs&&!inst)print}' "$README_PATH" > "$README_PATH.tmp" && mv "$README_PATH.tmp" "$README_PATH"
   fi
 
